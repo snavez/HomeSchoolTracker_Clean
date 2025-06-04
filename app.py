@@ -215,13 +215,21 @@ def _get_weekly_progress_data(user_id, date_str):
         # Calculate daily reading delta
         dr = 0
         if acc_read is not None:
-             if current_title != prev_title and current_title is not None: dr = acc_read
-             elif prev_read is not None: dr = max(0, acc_read - prev_read)
-             else: dr = acc_read
+            is_new_book = (
+                current_title is not None
+                and (prev_title is None or current_title != prev_title)
+            ) or (acc_read < prev_read)   # e.g. 5 % after finishing last book at 100 %
+            if is_new_book:
+                dr = acc_read
+            elif prev_read is not None:
+                dr = max(0, acc_read - prev_read)
+            else:
+                dr = acc_read
 
         # Update context for next iteration
         prev_read = acc_read
-        prev_title = current_title
+        if current_title is not None:
+            prev_title = current_title
 
         # --- Check completion for text tasks ---
         for slug in text_task_defs.keys():
