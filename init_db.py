@@ -87,6 +87,12 @@ def init_db():
         );
         ''')
 
+        # Guarantee only one row per student per day
+        c.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_reports_user_date
+            ON daily_reports(user_id, date)
+        """)
+
         conn.commit()
 
 if __name__ == '__main__':

@@ -686,11 +686,15 @@ def update_daily_report(user_id, date):
         print(f"Values list for DB: {values_list}")
 
         try:
+            cols        = ', '.join(f'"{f}"' for f in fields)          # "book_title", "word_count", …
+            placeholders = ', '.join('?' for _ in fields)              # ?, ?, ?, …
+            upd         = ', '.join(f'"{f}" = EXCLUDED."{f}"' for f in fields)
             c.execute(f'''
-                INSERT OR REPLACE INTO daily_reports (
-                    user_id, date, {field_list_str}
-                ) VALUES ({placeholder_str})
-            ''', values_list)
+                INSERT INTO daily_reports (user_id, date, {cols})
+                VALUES (?, ?, {placeholders})
+                ON CONFLICT(user_id, date) DO UPDATE SET
+                    {upd}
+            ''', [user_id, date, *[processed_data[f] for f in fields]])
             conn.commit()
             print("Database commit successful.")
             return jsonify({'status': 'success'}), 200
