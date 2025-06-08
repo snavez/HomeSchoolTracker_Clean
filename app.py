@@ -158,6 +158,8 @@ def _get_weekly_progress_data(user_id, date_str):
         prev_context_row = c.fetchone()
         
         prev_read = prev_context_row['accumulated_reading_percent'] if prev_context_row else 0
+        if prev_read is None:
+            prev_read = 0
         prev_title = prev_context_row['book_title'] if prev_context_row else None
         current_applicable_rate = prev_context_row['expected_weekly_reading_rate'] if prev_context_row else None
         current_applicable_count = prev_context_row['word_count'] if prev_context_row else None
@@ -191,6 +193,8 @@ def _get_weekly_progress_data(user_id, date_str):
         act_pts = report_data.get('actual_math_points', 0) or 0
         act_time = report_data.get('math_time', 0) or 0
         acc_read = report_data.get('accumulated_reading_percent', prev_read) if report_data else prev_read
+        if acc_read is None:
+            acc_read = prev_read
         current_title = report_data.get('book_title', None)
 
         # Update applicable rate/count
@@ -218,7 +222,7 @@ def _get_weekly_progress_data(user_id, date_str):
             is_new_book = (
                 current_title is not None
                 and (prev_title is None or current_title != prev_title)
-            ) or (acc_read < prev_read)   # e.g. 5 % after finishing last book at 100 %
+            ) or (prev_read is not None and acc_read < prev_read)   # e.g. 5 % after finishing last book at 100 %
             if is_new_book:
                 dr = acc_read
             elif prev_read is not None:

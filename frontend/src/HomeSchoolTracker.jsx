@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { ResponsiveContainer, ComposedChart, BarChart, LineChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 export default function HomeSchoolTracker({ userId, onLogout }) {
-  const [entry, setEntry] = useState({ date: '' });
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [entry, setEntry] = useState({ date: todayStr });
   const [definitions, setDefinitions] = useState([]);
   const [entries, setEntries] = useState({});
   const [weeklyData, setWeeklyData] = useState([]);
@@ -12,6 +13,7 @@ export default function HomeSchoolTracker({ userId, onLogout }) {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     console.log(`Input changed: ${name}=${value}`);
+    if (name === 'date') return;
     setEntry(prevEntry => ({ ...prevEntry, [name]: value }));
   };
 
@@ -242,7 +244,7 @@ export default function HomeSchoolTracker({ userId, onLogout }) {
           type="date" 
           name="date" 
           value={entry.date} 
-          required 
+          disabled 
           className="border p-2 rounded text-gray-700 bg-gray-50 cursor-pointer focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           style={{ maxWidth: '180px' }} 
           onChange={handleInputChange}
