@@ -40,7 +40,7 @@ useEffect(() => {
     .then(initialEntries => {
       setEntries(initialEntries);
       // Now fetch the student's last word_count & weekly rate
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA');
       fetch(`/last-known-data/${selectedUser}/${today}`)
       .then(r2 => r2.json())
       .then(({ word_count, expected_weekly_reading_rate }) => {
@@ -123,7 +123,7 @@ useEffect(() => {
     // Only run calculation if user is selected AND Edit Tasks tab is active
     if (selectedUser && currentAction === 'editTasks') {
         console.log("EFFECT: Fetching and Recalculating reading % for Edit Tasks tab");
-        const today = new Date().toISOString().split('T')[0]; // Use today to get latest known
+        const today = new Date().toLocaleDateString('en-CA'); // Use today to get latest known
         fetch(`/last-known-data/${selectedUser}/${today}`) // Fetch the absolute latest data
             .then(r => r.ok ? r.json() : {})
             .then(data => {

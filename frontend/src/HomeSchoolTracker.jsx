@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { ResponsiveContainer, ComposedChart, BarChart, LineChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 export default function HomeSchoolTracker({ userId, onLogout }) {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = new Date().toLocaleDateString('en-CA');
   const [entry, setEntry] = useState({ date: todayStr });
   const [definitions, setDefinitions] = useState([]);
   const [entries, setEntries] = useState({});
