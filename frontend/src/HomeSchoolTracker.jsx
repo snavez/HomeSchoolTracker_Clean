@@ -9,6 +9,12 @@ export default function HomeSchoolTracker({ userId, onLogout }) {
   const [weeklyData, setWeeklyData] = useState([]);
   const [weeklySummary, setWeeklySummary] = useState(null);
   const [textTaskData, setTextTaskData] = useState(null);
+  const tierClasses = {
+    excellent:  'p-4 my-4 rounded bg-green-100 border-l-4 border-green-600',
+    good:       'p-4 my-4 rounded bg-blue-100  border-l-4 border-blue-600',
+    needsWork:'p-4 my-4 rounded bg-red-100   border-l-4 border-red-600',
+    noData:  'p-4 my-4 rounded bg-gray-100  border-l-4 border-gray-400'
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -325,6 +331,30 @@ export default function HomeSchoolTracker({ userId, onLogout }) {
 
       <div className="mt-6">
         <h2 className="text-2xl font-semibold mb-4">Weekly Progress Charts</h2>
+        {weeklySummary?.effort && (() => {
+          const e = weeklySummary.effort;
+          return (
+            <div className={tierClasses[e.tier]}>
+              <strong>{
+                e.scope==='final'
+                  ? (e.tier==='excellent'
+                      ? 'Goal achieved! 🎉'
+                      : e.tier==='good'
+                          ? (e.nudge || 'Good work – so close!')
+                          : 'Tsk tsk – chores ahead!')
+                  : (e.tier==='excellent'
+                      ? 'Awesome — keep it up!'
+                      : e.tier==='good'
+                          ? 'You’re on track.'
+                          : 'You’re falling behind.')
+              }</strong>
+              <div className="mt-1 text-sm">
+                Overall {(e.overall_pct*100).toFixed(0)} %
+                {e.extra_tasks>0 && `  (+${e.extra_tasks} extra task${e.extra_tasks>1?'s':''})`}
+              </div>
+            </div>
+          );
+        })()}
         {weeklyData.length > 0 ? (
           <>
             {/* Math Section */}

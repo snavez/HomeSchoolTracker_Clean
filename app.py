@@ -181,6 +181,8 @@ def _get_weekly_progress_data(user_id, date_str):
     # --- End Initialize ---
 
     daily_data_out = []
+    running_expect_math = running_expect_read = running_plan_tasks = 0
+
     for i in range(7):
         current = monday + timedelta(days=i)
         date_str = current.strftime('%Y-%m-%d')
@@ -249,6 +251,12 @@ def _get_weekly_progress_data(user_id, date_str):
         total_actual_reading_percent += dr
         total_expected_reading_percent += exp_read_percent
 
+        # Get running values of expected achievements for Mon to selected day
+        if current <= d:                       # only Mon-to-selected-day
+            running_expect_math  += exp_pts
+            running_expect_read  += exp_read_percent
+            running_plan_tasks   += sum(1 for slug in text_task_defs if plan.get(slug, {}).get(weekday_full, '').strip())
+
         # Append daily data
         daily_data_out.append({
             'date': date_str, 'day': weekday_full[:3],
@@ -258,7 +266,20 @@ def _get_weekly_progress_data(user_id, date_str):
             'expected_daily_reading_percent': exp_read_percent
         })
 
+    # --- Totals for custom text tasks ---------------------------------
+    planned_week_text_tasks = sum(
+        1
+        for slug in text_task_defs
+        for v in plan.get(slug, {}).values()
+        if str(v).strip()           # a value was planned
+    )
 
+    completed_week_text_tasks = sum(
+        1
+        for slug in text_task_defs
+        for done in text_task_completion[slug].values()
+        if done                      # the student actually did it
+    )
     # Prepare final response
     response_data = {
         "dailyData": daily_data_out,
@@ -274,6 +295,69 @@ def _get_weekly_progress_data(user_id, date_str):
              "plan": {slug: plan.get(slug, {}) for slug in text_task_defs.keys()}
         }
     }
+
+    # ---------- Effort summary ----------
+    def _pct(num, denom): 
+        return None if not denom else round(num/denom,3)
+
+    math_pct = _pct(total_actual_math_points,   running_expect_math if d.weekday()<6 else total_expected_math_points)
+    read_pct = _pct(total_actual_reading_percent, running_expect_read if d.weekday()<6 else total_expected_reading_percent)
+
+    planned_total   = running_plan_tasks if d.weekday()<6 else planned_week_text_tasks
+    completed_total = completed_week_text_tasks
+    tasks_pct       = _pct(min(completed_total, planned_total), planned_total)
+
+    extra_tasks     = max(0, completed_total - planned_total)
+
+    parts = [p for p in (math_pct, read_pct, tasks_pct) if p is not None]
+    overall_pct = round(sum(parts)/len(parts),3) if parts else None
+
+    def tier(p):            # thresholds
+        if p is None: return 'noData'
+        if p < .88:  return 'needsWork'
+        if p < .98:  return 'good'
+        return 'excellent'
+
+    scope = 'progress' if d.weekday()<6 else 'final'
+
+    effort = {
+        "math_pct": math_pct,
+        "reading_pct": read_pct,
+        "tasks_pct": tasks_pct,
+        "overall_pct": overall_pct,
+        "tier": tier(overall_pct),
+        "scope": scope,
+        "extra_tasks": extra_tasks
+    }
+
+    # Sunday “near-miss” nudge
+    if scope=='final' and effort["tier"]=='good' and (0.95-overall_pct)<=0.02:
+        weakest = min({'math':math_pct,'reading':read_pct,'tasks':tasks_pct},
+                      key=lambda k: {'math':math_pct,'reading':read_pct,'tasks':tasks_pct}[k])
+        effort["nudge"] = f"Finish your {weakest} goal and you’ll hit 100 %!"
+
+    response_data["summary"]["effort"] = effort 
+    response_data["effort"] = effort
+
+    # Admin reward hook ..   
+    if scope == 'final' and overall_pct is not None:
+        try:
+            with sqlite3.connect(DATABASE) as conn:
+                c = conn.cursor()
+                c.execute('''
+                    INSERT OR REPLACE INTO weekly_results
+                           (user_id, week, pct, tier)
+                    VALUES (?, ?, ?, ?)
+                ''', (
+                    user_id,
+                    monday.strftime('%Y-%m-%d'),   # store the Monday that starts the week
+                    overall_pct,
+                    effort["tier"]
+                ))
+                conn.commit()
+        except Exception as e:
+            # log but never crash the API
+            print(f"[weekly_results] failed to save result: {e}")
 
     return response_data
 

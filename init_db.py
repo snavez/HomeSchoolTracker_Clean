@@ -87,6 +87,19 @@ def init_db():
         );
         ''')
 
+        # Results table
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS weekly_results (
+            user_id INTEGER,
+            week     TEXT,      -- Monday date
+            pct      REAL,
+            tier     TEXT,
+            PRIMARY KEY(user_id, week)
+        ); 
+        ''')
+        #note: semi-colon above may be wrong - so possibly remove if an issue with init
+
+
         # Guarantee only one row per student per day
         c.execute("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_reports_user_date
