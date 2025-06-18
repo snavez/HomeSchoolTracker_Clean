@@ -97,7 +97,39 @@ def init_db():
             PRIMARY KEY(user_id, week)
         ); 
         ''')
-        #note: semi-colon above may be wrong - so possibly remove if an issue with init
+
+        # Configurable Tier thresholds
+        c.execute('''
+        CREATE TABLE IF NOT EXISTS tier_thresholds (
+            id              INTEGER  PRIMARY KEY CHECK (id = 1),   -- always exactly one row
+            needs_work_max  REAL     NOT NULL DEFAULT 0.88,        -- < this  → needsWork
+            good_max        REAL     NOT NULL DEFAULT 0.98         -- < this  → good
+        );
+        ''')
+
+        c.execute('INSERT OR IGNORE INTO tier_thresholds(id) VALUES (1)')
+        
+        # Configurable wording for the 3 tiers, both mid-week (“progress”) and Sunday (“final”)
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS tier_messages (
+            tier    TEXT NOT NULL,          -- excellent | good | needsWork
+            scope   TEXT NOT NULL,          -- progress | final
+            message TEXT NOT NULL,
+            PRIMARY KEY(tier, scope)
+        );
+        """)
+        
+        c.executemany("""
+            INSERT OR IGNORE INTO tier_messages(tier, scope, message) VALUES (?,?,?)
+        """, [
+            ('excellent','progress','Awesome — you’re on track for a great week!'),
+            ('good',     'progress','You’re doing well - but keep focusing on your daily to-dos.'),
+            ('needsWork','progress','Uh-oh - looks like you’re falling behind.  Try and make up some of your missed tasks'),
+
+            ('excellent','final','Woo!!  Goal achieved! Double pocket money this week! 🎉'),
+            ('good',     'final','A solid effort - try for a bonus next week!'),
+            ('needsWork','final','Tsk tsk – not enough effort. You’re on the chore roster next week!')
+        ])
 
 
         # Guarantee only one row per student per day

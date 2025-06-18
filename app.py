@@ -11,6 +11,8 @@ DATABASE = os.environ.get(
     os.path.join(os.path.dirname(__file__), 'homeschool_tracker.db')
 )
 
+NEAR_MISS_DELTA = 0.02
+
 def snake_case(s: str) -> str:
     # turn "My New Field" → "my_new_field"
     s = re.sub(r'[^\w]+', '_', s)    # non-alphanum → underscore
@@ -312,10 +314,17 @@ def _get_weekly_progress_data(user_id, date_str):
     parts = [p for p in (math_pct, read_pct, tasks_pct) if p is not None]
     overall_pct = round(sum(parts)/len(parts),3) if parts else None
 
+    def load_thresholds(cursor):
+        cursor.execute('SELECT needs_work_max, good_max FROM tier_thresholds WHERE id=1')
+        row = cursor.fetchone() or (0.88, 0.98)          # very first run safety-net
+        return row[0], row[1]
+
+    needs_work_max, good_max = load_thresholds(c)
+    
     def tier(p):            # thresholds
         if p is None: return 'noData'
-        if p < .88:  return 'needsWork'
-        if p < .98:  return 'good'
+        if p < needs_work_max:  return 'needsWork'
+        if p < good_max:  return 'good'
         return 'excellent'
 
     scope = 'progress' if d.weekday()<6 else 'final'
@@ -331,7 +340,8 @@ def _get_weekly_progress_data(user_id, date_str):
     }
 
     # Sunday “near-miss” nudge
-    if scope=='final' and effort["tier"]=='good' and (0.95-overall_pct)<=0.02:
+    excellent_cutoff = good_max
+    if scope=='final' and effort["tier"]=='good' and (excellent_cutoff - overall_pct) <= NEAR_MISS_DELTA:
         weakest = min({'math':math_pct,'reading':read_pct,'tasks':tasks_pct},
                       key=lambda k: {'math':math_pct,'reading':read_pct,'tasks':tasks_pct}[k])
         effort["nudge"] = f"Finish your {weakest} goal and you’ll hit 100 %!"
@@ -909,6 +919,67 @@ def get_student_weekly_progress(user_id, date):
         # Catch other unexpected errors during calculation
         print(f"ERROR in get_student_weekly_progress for user {user_id}, date {date}: {e}") # Log error
         return jsonify({"error": "An internal server error occurred processing weekly progress."}), 500
+
+@app.route('/admin/tier-thresholds', methods=['GET'])
+def get_tier_thresholds():
+    with sqlite3.connect(DATABASE) as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT needs_work_max, good_max FROM tier_thresholds WHERE id=1')
+        row = cur.fetchone() or (0.88, 0.98)
+    return jsonify({'needsWorkMax': row[0], 'goodMax': row[1]}), 200       
+
+@app.route('/admin/tier-thresholds', methods=['POST'])
+def set_tier_thresholds():
+    data = request.json or {}
+    try:
+        nw = float(data['needsWorkMax'])
+        gm = float(data['goodMax'])
+        assert 0 < nw < gm < 1
+    except (KeyError, ValueError, AssertionError):
+        return jsonify({'status':'failure',
+                        'message':'Both numbers must be between 0 and 1, and needsWork < good.'}), 400
+    with sqlite3.connect(DATABASE) as conn:
+        cur = conn.cursor()
+        cur.execute('UPDATE tier_thresholds SET needs_work_max=?, good_max=? WHERE id=1', (nw, gm))
+        conn.commit()
+    return jsonify({'status':'success'}), 200    
+
+@app.route('/admin/tier-messages', methods=['GET'])
+def get_tier_messages():
+    with sqlite3.connect(DATABASE) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT tier, scope, message FROM tier_messages")
+        rows = cur.fetchall()
+    out = {s: {} for s in ('progress','final')}
+    for tier, scope, msg in rows:
+        out[scope][tier] = msg
+    return jsonify(out), 200
+
+@app.route('/admin/tier-messages', methods=['POST'])
+def set_tier_messages():
+    data = request.json or {}
+    try:
+        with sqlite3.connect(DATABASE) as conn:
+            cur = conn.cursor()
+            for scope, tiers in data.items():
+                if scope not in ('progress','final'):  continue
+                for tier, msg in tiers.items():
+                    if tier not in ('excellent','good','needsWork'):  continue
+                    cur.execute("""
+                        INSERT INTO tier_messages(tier,scope,message)
+                        VALUES (?,?,?)
+                        ON CONFLICT(tier,scope) DO UPDATE SET message=excluded.message
+                    """, (tier,scope,msg.strip()))
+            conn.commit()
+        return jsonify({'status':'success'}), 200
+    except Exception as e:
+        return jsonify({'status':'failure','message':str(e)}), 500
+
+# ---- public (students) -------------------------------------------
+@app.route('/tier-messages', methods=['GET'])
+def public_tier_messages():
+    return get_tier_messages()
+
 
 # Serve React frontend
 @app.route('/', defaults={'path': ''})

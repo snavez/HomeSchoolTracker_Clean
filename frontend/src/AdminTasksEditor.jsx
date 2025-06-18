@@ -19,12 +19,28 @@ export default function AdminTasksEditor({ onLogout }) {
   const [weeklyData, setWeeklyData] = useState([]);
   const [weeklySummary, setWeeklySummary] = useState(null);
   const [textTaskData, setTextTaskData] = useState(null);
+  const [flash, setFlash] = useState(null);
+  const [tierBounds, setTierBounds] = useState({ needsWorkMax: 0.88, goodMax: 0.98 });
+  const [tierMsgs, setTierMsgs] = useState({ progress:{}, final:{} });
   const tierClasses = {
     excellent:  'p-4 my-4 rounded bg-green-100 border-l-4 border-green-600',
     good:       'p-4 my-4 rounded bg-blue-100  border-l-4 border-blue-600',
     needsWork:'p-4 my-4 rounded bg-red-100   border-l-4 border-red-600',
     noData:  'p-4 my-4 rounded bg-gray-100  border-l-4 border-gray-400'
   };
+  const defaultMsgs = {
+    progress: {
+      excellent: 'Awesome — you’re on track for a great week!',
+      good:      'You’re doing well - but keep focusing on your daily to-dos.',
+      needsWork: 'Uh-oh - looks like you’re falling behind.  Try and make up some of your missed tasks'
+    },
+    final: {
+      excellent: 'Woo!!  Goal achieved! Double pocket money this week! 🎉',
+      good:      'A solid effort - try for a bonus next week!',
+      needsWork: 'Tsk tsk – not enough effort. You’re on the chore roster next week!'
+    }
+  };
+  
 
 useEffect(() => {
   if (!selectedUser) {
@@ -36,6 +52,20 @@ useEffect(() => {
     .then(res => res.json())
     .then(setDefinitions);
 }, [selectedUser]);
+
+useEffect(() => {
+  fetch('/admin/tier-thresholds')
+  .then(r=>r.json())
+  .then(setTierBounds)
+  .catch(console.error);
+}, []);
+
+useEffect(() => {
+  fetch('/tier-messages')
+    .then(r => r.json())
+    .then(setTierMsgs)
+    .catch(console.error);
+}, []);
 
 useEffect(() => {
   if (!selectedUser) return;
@@ -563,603 +593,733 @@ const saveDailyReport = async () => {
   return (
     <div className="max-w-6xl mx-auto p-6">
       <div className="w-full flex justify-between items-center bg-gray-100 p-4 border border-blue-500">
+        {flash && (
+          <div className="fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50">
+            {flash}
+          </div>
+        )}
         <h2 className="text-2xl font-bold">Admin Interface</h2>
-        <button 
-          onClick={handleLogout}
-          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-        >
-        Logout
-        </button>
-      </div>
-
-      <div className="mb-4">
-        <h3 className="text-xl font-semibold mb-2">Users</h3>
-        <div className="flex items-center gap-x-4">
-          <select
-            className="border p-2 rounded"
-            onChange={handleUserChange}
-            value={selectedUser || ''}
-          >
-          {users.length > 0 ? (
-            <>
-              <option value="">Select user</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.username}</option>
-              ))}
-            </>
-          ) : (
-            <option value="">None</option>
-          )}
-        </select>
-        <button
-          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition"
-          onClick={() => setShowAddUserForm(true)}
-        >
-          Add New User
-        </button>
-     
-
-      {showAddUserForm && (
-        <form className="mt-4 p-4 border rounded" onSubmit={submitNewUser}>
-            <input name="username" placeholder="Username" required onChange={handleNewUserChange} className="border p-2 w-full mb-2"/>
-            <input name="password" placeholder="Password" required type="password" onChange={handleNewUserChange} className="border p-2 w-full mb-2"/>
-            <select name="role" onChange={handleNewUserChange} className="border p-2 w-full mb-2">
-                <option value="student">Student</option>
-                <option value="admin">Admin</option>
-            </select>
-            <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded">Add User</button>
-            <button type="button" className="bg-red-500 text-white px-4 py-2 rounded ml-2"
-              onClick={() => setShowAddUserForm(false)}>Cancel</button>
-        </form>
-      )}
-        </div>
-      </div>
-
-      {users.length > 0 && selectedUser && (
-      // "Tab" buttons always visible once a user is selected:
-      <div> 
-        <div className="mt-4 flex space-x-2">
-        <button
-          className={
-            `px-4 py-2 rounded ${
-              currentAction === 'editTasks'
+        <div className="flex gap-2">
+          <button
+            className={`px-4 py-2 rounded ${
+              currentAction === ''            // '' = the user-page we start on
                 ? 'bg-blue-700 text-white'
                 : 'bg-blue-500 text-white hover:bg-blue-600'
-            }`
-          }
-          onClick={() => setCurrentAction('editTasks')}
-        >
-          Edit Expected Tasks
-        </button>
-        <button
-          className={
-            `px-4 py-2 rounded ${
-              currentAction === 'configureUser'
-                ? 'bg-gray-700 text-white'
-                : 'bg-gray-500 text-white hover:bg-gray-600'
-            }`
-          }
-          onClick={() => setCurrentAction('configureUser')}
-        >
-          View/Edit Daily Report
-        </button>
+            }`}
+            onClick={() => setCurrentAction('')}
+          >
+            Users
+          </button>
+          <button
+            className={`px-4 py-2 rounded ${
+              currentAction === 'dashboard'
+                ? 'bg-green-700 text-white'
+                : 'bg-green-500 text-white hover:bg-green-600'
+            }`}
+            onClick={() => setCurrentAction('dashboard')}
+          >
+            Dashboard
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+          >
+            Logout
+          </button>
         </div>
-        
-        {selectedUser && currentAction==='configureUser' && (
-          <div className="mt-4 p-4 border rounded">
-            <h3>Edit Daily Report</h3>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              className="border p-2 rounded mb-2"
-            />
-            
-            {/* Expected Tasks block */}
-            {selectedDate && (
-              <div className="p-4 bg-yellow-100 border-l-4 border-yellow-500 rounded mb-4">
-                <strong>Expected Today:</strong>{' '}
-                {(() => {
-                  const day = new Date(selectedDate)
-                    .toLocaleDateString('en-US',{ weekday:'long' });
-                  const todayTasks = entries[day] || {};
-                  return definitions
-                    .filter(def => todayTasks[def.slug])
-                    .map(def => `${def.label}: ${todayTasks[def.slug]}`)
-                    .join(', ') || 'None set';
-                })()}
-              </div>
-            )}
-            
-            {selectedDate && definitions.length > 0 && (
-              <>
-                <form onSubmit={e => { e.preventDefault(); saveDailyReport(); }}>
-                 {definitions
-                    .filter(def => def.is_active && (
-                      !def.is_default ||
-                      ['actual_math_points','math_time','book_title','word_count','accumulated_reading_percent', 'expected_weekly_reading_rate']
-                      .includes(def.slug)
-                    ))
-                    .map(def => (
-                    <div key={def.slug} className="mb-2">
-                      <label>{def.label}</label>
-                      <input
-                        type={def.field_type==='number'?'number':'text'}
-                        step={def.field_type==='number' ? "1" : undefined}
-                        min={def.field_type==='number' ? "0" : undefined}
-                        name={def.slug}
-                        value={String(entry[def.slug] ?? '')}
-                        onChange={handleInputChange}
-                        readOnly={def.readonly || def.slug === 'expected_daily_reading_percent'}
-                        className={
-                          `w-full border p-2 rounded ${
-                            (def.readonly || def.slug === 'expected_daily_reading_percent')
-                              ? 'bg-gray-100'
-                              : 'border-gray-300'
-                        }`
-                        }
-                      />
-                    </div>
+      </div>
+      
+      {currentAction !== 'dashboard' && (
+        <>
+          <div className="mb-4">
+            <h3 className="text-xl font-semibold mb-2">Users</h3>
+            <div className="flex items-center gap-x-4">
+              <select
+                className="border p-2 rounded"
+                onChange={handleUserChange}
+                value={selectedUser || ''}
+              >
+              {users.length > 0 ? (
+                <>
+                  <option value="">Select user</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.username}</option>
                   ))}
-                  <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded">
-                    Save Report
-                  </button>
-                </form>
+                </>
+              ) : (
+                <option value="">None</option>
+              )}
+            </select>
+            <button
+              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition"
+              onClick={() => setShowAddUserForm(true)}
+            >
+              Add New User
+            </button>
+        
 
-                {/* === Weekly Progress Charts Section === */}
+          {showAddUserForm && (
+            <form className="mt-4 p-4 border rounded" onSubmit={submitNewUser}>
+                <input name="username" placeholder="Username" required onChange={handleNewUserChange} className="border p-2 w-full mb-2"/>
+                <input name="password" placeholder="Password" required type="password" onChange={handleNewUserChange} className="border p-2 w-full mb-2"/>
+                <select name="role" onChange={handleNewUserChange} className="border p-2 w-full mb-2">
+                    <option value="student">Student</option>
+                    <option value="admin">Admin</option>
+                </select>
+                <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded">Add User</button>
+                <button type="button" className="bg-red-500 text-white px-4 py-2 rounded ml-2"
+                  onClick={() => setShowAddUserForm(false)}>Cancel</button>
+            </form>
+          )}
+            </div>
+          </div>
+          
+          <div className="mt-4 flex space-x-2">
+            {users.length > 0 && selectedUser && (
+            <> 
+              {/* "Tab" buttons always visible once a user is selected: */}
+              <button
+                className={
+                  `px-4 py-2 rounded ${
+                    currentAction === 'editTasks'
+                      ? 'bg-blue-700 text-white'
+                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                  }`
+                }
+                onClick={() => setCurrentAction('editTasks')}
+              >
+                Edit Expected Tasks
+              </button>
+              <button
+                className={
+                  `px-4 py-2 rounded ${
+                    currentAction === 'configureUser'
+                      ? 'bg-gray-700 text-white'
+                      : 'bg-gray-500 text-white hover:bg-gray-600'
+                  }`
+                }
+                onClick={() => setCurrentAction('configureUser')}
+              >
+                View/Edit Daily Report
+              </button>
+            </>
+            )}
+          </div>
+        </>
+      )}
+      
+      {/* === START: DASHBOARD Section === */}
+      {currentAction === 'dashboard' && (
+        <div className="mt-4 p-4 border rounded">
+          <h3 className="text-lg font-semibold mb-4">Tier Thresholds</h3>
+      
+          <label className="block mb-2">
+            <span className="text-gray-700">Needs-Work&nbsp;&lt;&nbsp;Max&nbsp;(0-1)</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="1"
+              value={tierBounds.needsWorkMax}
+              onChange={e =>
+                setTierBounds({ ...tierBounds, needsWorkMax: parseFloat(e.target.value) })
+              }
+              className="mt-1 block w-full border p-2 rounded"
+            />
+          </label>
+      
+          <label className="block mb-4">
+            <span className="text-gray-700">Good&nbsp;&lt;&nbsp;Max&nbsp;(0-1)</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="1"
+              value={tierBounds.goodMax}
+              onChange={e =>
+                setTierBounds({ ...tierBounds, goodMax: parseFloat(e.target.value) })
+              }
+              className="mt-1 block w-full border p-2 rounded"
+            />
+          </label>
+          
+          <h3 className="text-lg font-semibold my-4">Tier Messages</h3>
+            {['progress','final'].map(scope => (
+              <div key={scope} className="mb-6">
+                <h4 className="font-medium mb-2">
+                  {scope==='progress' ? 'Mid-week' : 'Final / Sunday'}
+                </h4>
+                {['excellent','good','needsWork'].map(tier => (
+                  <label key={tier} className="block mb-2">
+                    <span className="text-gray-700 capitalize">{tier}</span>
+                    <textarea
+                      rows={2}
+                      className="mt-1 block w-full border p-2 rounded"
+                      value={tierMsgs?.[scope]?.[tier] ?? ''}
+                      onChange={e =>
+                        setTierMsgs(m => ({
+                          ...m,
+                          [scope]: { ...m[scope], [tier]: e.target.value }
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            ))}
 
-                {selectedDate && definitions.length > 0 && ( // Check if data can be loaded
-                  <div className="mt-6">
-                    <h3 className="text-xl font-semibold mb-2">Weekly Progress Charts</h3>
-                    {weeklySummary?.effort && (() => {
-                      const e = weeklySummary.effort;
-                      return (
-                        <div className={tierClasses[e.tier]}>
-                          <strong>{
-                            e.scope==='final'
-                              ? (e.tier==='excellent'
-                                  ? 'Woo!!  Goal achieved! Double pocket money this week! 🎉'
-                                  : e.tier==='good'
-                                      ? (e.nudge || 'A solid effort - try for a bonus next week!')
-                                      : 'Tsk tsk – not enough effort. You’re on the chore roster next week!')
-                              : (e.tier==='excellent'
-                                  ? 'Awesome — you’re on track for a great week!'
-                                  : e.tier==='good'
-                                      ? 'You’re doing well - but keep focusing on your daily to-dos.'
-                                      : 'Uh-oh - looks like you’re falling behind.  Try and make up some of your missed tasks')
-                          }</strong>
-                          <div className="mt-1 text-sm">
-                            Overall {(e.overall_pct*100).toFixed(0)} %
-                            {e.extra_tasks>0 && `  (+${e.extra_tasks} extra task${e.extra_tasks>1?'s':''})`}
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            onClick={async () => {
+              try {
+                // save thresholds
+                const tRes = await fetch('/admin/tier-thresholds', {
+                  method:'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify(tierBounds)
+                });
+                // save messages
+                const mRes = await fetch('/admin/tier-messages', {
+                  method:'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify(tierMsgs)
+                });
+                
+                if (!tRes.ok || !mRes.ok) {
+                  const msg = !(tRes.ok ? mRes : tRes);
+                  const {message='' } = await msg.json().catch(()=>({}));
+                  alert(message || 'Save failed');
+                  return;
+                }
+
+                setCurrentAction('');        // return to Users page
+                setFlash('Config Updated');  // toast for 3 s
+                setTimeout(()=>setFlash(null), 2000);
+              } 
+              
+              catch (err) {
+                alert(err.message);
+              }
+            }}
+          >
+            Save &amp; Exit Dashboard
+          </button>
+        </div>
+      )}
+      {/* === END: DASHBOARD Section === */}
+
+      {/* === START: CONFIGURE USER Section === */}
+      {selectedUser && currentAction==='configureUser' && (
+        <div className="mt-4 p-4 border rounded">
+          <h3>Edit Daily Report</h3>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            className="border p-2 rounded mb-2"
+          />
+          
+          {/* Expected Tasks block */}
+          {selectedDate && (
+            <div className="p-4 bg-yellow-100 border-l-4 border-yellow-500 rounded mb-4">
+              <strong>Expected Today:</strong>{' '}
+              {(() => {
+                const day = new Date(selectedDate)
+                  .toLocaleDateString('en-US',{ weekday:'long' });
+                const todayTasks = entries[day] || {};
+                return definitions
+                  .filter(def => todayTasks[def.slug])
+                  .map(def => `${def.label}: ${todayTasks[def.slug]}`)
+                  .join(', ') || 'None set';
+              })()}
+            </div>
+          )}
+          
+          {selectedDate && definitions.length > 0 && (
+            <>
+              <form onSubmit={e => { e.preventDefault(); saveDailyReport(); }}>
+                {definitions
+                  .filter(def => def.is_active && (
+                    !def.is_default ||
+                    ['actual_math_points','math_time','book_title','word_count','accumulated_reading_percent', 'expected_weekly_reading_rate']
+                    .includes(def.slug)
+                  ))
+                  .map(def => (
+                  <div key={def.slug} className="mb-2">
+                    <label>{def.label}</label>
+                    <input
+                      type={def.field_type==='number'?'number':'text'}
+                      step={def.field_type==='number' ? "1" : undefined}
+                      min={def.field_type==='number' ? "0" : undefined}
+                      name={def.slug}
+                      value={String(entry[def.slug] ?? '')}
+                      onChange={handleInputChange}
+                      readOnly={def.readonly || def.slug === 'expected_daily_reading_percent'}
+                      className={
+                        `w-full border p-2 rounded ${
+                          (def.readonly || def.slug === 'expected_daily_reading_percent')
+                            ? 'bg-gray-100'
+                            : 'border-gray-300'
+                      }`
+                      }
+                    />
+                  </div>
+                ))}
+                <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded">
+                  Save Report
+                </button>
+              </form>
+
+              {/* === Weekly Progress Charts Section === */}
+
+              {selectedDate && definitions.length > 0 && ( // Check if data can be loaded
+                <div className="mt-6">
+                  <h3 className="text-xl font-semibold mb-2">Weekly Progress Charts</h3>
+                  {weeklySummary?.effort && (() => {
+                    const e = weeklySummary.effort;
+                    return (
+                      <div className={tierClasses[e.tier]}>
+                        <strong>{
+                          (tierMsgs?.[e.scope === 'final' ? 'final' : 'progress']?.[e.tier])
+                          ?? defaultMsgs[e.scope][e.tier]
+                        }
+                        </strong>
+                        <div className="mt-1 text-sm">
+                          Overall {(e.overall_pct*100).toFixed(0)} %
+                          {e.extra_tasks>0 && `  (+${e.extra_tasks} extra task${e.extra_tasks>1?'s':''})`}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  
+                  {/* Check if weeklyData is loaded */}
+                  {weeklyData.length > 0 ? (
+                    <>
+                      {/* Math Section */}
+                      <div className="mb-8 p-4 bg-white rounded shadow">
+                        <h4 className="font-medium mb-2">Math Progress</h4>
+                        {/* This div arranges the daily and summary charts */}
+                        <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
+                          {/* This div holds the DAILY chart */}
+                          <div className="flex-auto w-full md:w-auto min-w-[300px]">
+                            <h5 className="font-normal mb-1 text-center text-gray-600">Daily: Points vs Time</h5>
+                            <ResponsiveContainer width="100%" height={300}>
+                              <ComposedChart data={weeklyData} margin={{ top: 20, right: 30, bottom: 30, left: 20 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis
+                                  dataKey="day"
+                                  tickFormatter={(value, index) => {
+                                      const item = weeklyData[index];
+                                      if (!item || !item.date) return value;
+                                      const dateObj = new Date(item.date + 'T00:00:00');
+                                      const dayName = dateObj.toLocaleDateString('en-NZ', { weekday: 'short' });
+                                      const dayNum = dateObj.getDate();
+                                      const month = dateObj.getMonth() + 1;
+                                      const shortDate = `${dayNum}/${month}`;
+                                      return `${dayName} ${shortDate}`;
+                                  }}
+                                  interval={0}
+                                />
+                                <YAxis yAxisId="left" label={{ value: 'Points', angle: -90, position: 'insideLeft' }} />
+                                <YAxis yAxisId="right" orientation="right" label={{ value: 'Time (min)', angle: 90, position: 'insideRight' }}/>
+                                <Tooltip />
+                                <Legend />
+                                <Bar yAxisId="left" dataKey="actual_math_points" name="Actual Points" fill="#7194da" />
+                                <Bar yAxisId="left" dataKey="expected_math_points" name="Target Points" fill="#b30000" />
+                                <Line yAxisId="right" type="monotone" dataKey="math_time" name="Actual Time (min)" stroke="#7194da" strokeWidth={2} />
+                                <Line yAxisId="right" type="monotone" dataKey="expected_math_time" name="Target Time (min)" stroke="#b30000" strokeWidth={2} />
+                              </ComposedChart>
+                            </ResponsiveContainer>
+                          </div>
+                        
+                          {/* Weekly Math Summary Chart */}
+                          <div className="flex-shrink-0 w-full md:w-1/4 md:basis-1/4 md:pl-4 border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0">
+                            <h5 className="font-normal mb-1 text-center text-gray-600">Weekly Total Points</h5>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart
+                                    data={[{ // Data structure for the bar chart
+                                        name: 'Total', // Single category
+                                        Actual: weeklySummary.total_actual_math_points,
+                                        Target: weeklySummary.total_expected_math_points
+                                    }]}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="category" dataKey="name" hide/> {/* Hide 'Total' label */}
+                                    <YAxis type="number"  /> {/* Values on X-axis */}
+                                    <Tooltip />
+                                    <Legend />
+                                    {/* Ensure dataKeys match the keys in the data array above */}
+                                    <Bar dataKey="Actual" name="Actual Points" fill="#7194da" />
+                                    <Bar dataKey="Target" name="Target Points" fill="#b30000" />
+                                </BarChart>
+                            </ResponsiveContainer>
                           </div>
                         </div>
-                      );
-                    })()}
-                    
-                    
-                    {/* Check if weeklyData is loaded */}
-                    {weeklyData.length > 0 ? (
-                      <>
-                        {/* Math Section */}
-                        <div className="mb-8 p-4 bg-white rounded shadow">
-                          <h4 className="font-medium mb-2">Math Progress</h4>
-                          {/* This div arranges the daily and summary charts */}
+                      </div>
+                      
+                      {/* Reading Section */}
+                      <div className="bg-white p-4 rounded shadow">
+                        <h4 className="font-medium mb-2">Reading Progress</h4>
+                        {/* This div arranges the daily and summary charts */}
                           <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
                             {/* This div holds the DAILY chart */}
                             <div className="flex-auto w-full md:w-auto min-w-[300px]">
-                              <h5 className="font-normal mb-1 text-center text-gray-600">Daily: Points vs Time</h5>
-                              <ResponsiveContainer width="100%" height={300}>
-                                <ComposedChart data={weeklyData} margin={{ top: 20, right: 30, bottom: 30, left: 20 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis
-                                    dataKey="day"
-                                    tickFormatter={(value, index) => {
-                                        const item = weeklyData[index];
-                                        if (!item || !item.date) return value;
-                                        const dateObj = new Date(item.date + 'T00:00:00');
-                                        const dayName = dateObj.toLocaleDateString('en-NZ', { weekday: 'short' });
-                                        const dayNum = dateObj.getDate();
-                                        const month = dateObj.getMonth() + 1;
-                                        const shortDate = `${dayNum}/${month}`;
-                                        return `${dayName} ${shortDate}`;
-                                    }}
-                                    interval={0}
-                                  />
-                                  <YAxis yAxisId="left" label={{ value: 'Points', angle: -90, position: 'insideLeft' }} />
-                                  <YAxis yAxisId="right" orientation="right" label={{ value: 'Time (min)', angle: 90, position: 'insideRight' }}/>
-                                  <Tooltip />
-                                  <Legend />
-                                  <Bar yAxisId="left" dataKey="actual_math_points" name="Actual Points" fill="#7194da" />
-                                  <Bar yAxisId="left" dataKey="expected_math_points" name="Target Points" fill="#b30000" />
-                                  <Line yAxisId="right" type="monotone" dataKey="math_time" name="Actual Time (min)" stroke="#7194da" strokeWidth={2} />
-                                  <Line yAxisId="right" type="monotone" dataKey="expected_math_time" name="Target Time (min)" stroke="#b30000" strokeWidth={2} />
-                                </ComposedChart>
-                              </ResponsiveContainer>
-                            </div>
-                          
-                            {/* Weekly Math Summary Chart */}
-                            <div className="flex-shrink-0 w-full md:w-1/4 md:basis-1/4 md:pl-4 border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0">
-                              <h5 className="font-normal mb-1 text-center text-gray-600">Weekly Total Points</h5>
-                              <ResponsiveContainer width="100%" height={300}>
-                                  <BarChart
-                                      data={[{ // Data structure for the bar chart
-                                          name: 'Total', // Single category
-                                          Actual: weeklySummary.total_actual_math_points,
-                                          Target: weeklySummary.total_expected_math_points
-                                      }]}
-                                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                                  >
-                                      <CartesianGrid strokeDasharray="3 3" />
-                                      <XAxis type="category" dataKey="name" hide/> {/* Hide 'Total' label */}
-                                      <YAxis type="number"  /> {/* Values on X-axis */}
-                                      <Tooltip />
-                                      <Legend />
-                                      {/* Ensure dataKeys match the keys in the data array above */}
-                                      <Bar dataKey="Actual" name="Actual Points" fill="#7194da" />
-                                      <Bar dataKey="Target" name="Target Points" fill="#b30000" />
-                                  </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Reading Section */}
-                        <div className="bg-white p-4 rounded shadow">
-                          <h4 className="font-medium mb-2">Reading Progress</h4>
-                          {/* This div arranges the daily and summary charts */}
-                            <div className="flex flex-wrap md:flex-nowrap gap-4 items-start">
-                              {/* This div holds the DAILY chart */}
-                              <div className="flex-auto w-full md:w-auto min-w-[300px]">
-                              <h5 className="font-normal mb-1 text-center text-gray-600">Daily Reading Progress</h5>
-                              <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={weeklyData} margin={{ top: 20, right: 30, bottom: 30, left: 20 }}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis
-                                    dataKey="day"
-                                    tickFormatter={(value, index) => {
-                                        const item = weeklyData[index];
-                                        if (!item || !item.date) return value;
-                                        const dateObj = new Date(item.date + 'T00:00:00');
-                                        const dayName = dateObj.toLocaleDateString('en-NZ', { weekday: 'short' });
-                                        const dayNum = dateObj.getDate();
-                                        const month = dateObj.getMonth() + 1;
-                                        const shortDate = `${dayNum}/${month}`;
-                                        return `${dayName} ${shortDate}`;
-                                    }}
-                                    interval={0}
-                                  />
-                                  <YAxis label={{ value: 'Percent (%)', angle: -90, position: 'insideLeft' }}/>
-                                  <Tooltip />
-                                  <Legend />
-                                  <Line dataKey="daily_reading_percent" name="Actual % Read" stroke="#7194da" strokeWidth={2} />
-                                  <Line type="monotone" dataKey="expected_daily_reading_percent" name="Target % Read" stroke="#b30000" strokeWidth={2} />
-                                </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                            
-                            {/* Weekly Reading Summary Chart */}
-                            <div className="flex-shrink-0 w-full md:w-1/4 md:basis-1/4 md:pl-4 border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0">
-                              <h5 className="font-normal mb-1 text-center text-gray-600">Weekly Total Reading %</h5>
-                              <ResponsiveContainer width="100%" height={300}>
-                                  <BarChart
-                                      data={[{ // Data structure for the bar chart
-                                          name: 'Total', // Single category
-                                          Actual: weeklySummary.total_actual_reading_percent,
-                                          Target: weeklySummary.total_expected_reading_percent
-                                      }]}
-                                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                                  >
-                                      <CartesianGrid strokeDasharray="3 3" />
-                                      <XAxis type="category" dataKey="name" hide/> {/* Hide 'Total' label */}
-                                      <YAxis type="number"  /> {/* Values on X-axis */}
-                                      <Tooltip />
-                                      <Legend />
-                                      {/* Ensure dataKeys match the keys in the data array above */}
-                                      <Bar dataKey="Actual" name="Actual Reading %" fill="#7194da" />
-                                      <Bar dataKey="Target" name="Target Reading %" fill="#b30000" />
-                                  </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-
-                          </div>
-                        </div>
-
-                        {/* Weekly Text Task Summary Section */}
-                        <div className="mt-8">
-                          <h4 className="text-2xl font-semibold mb-4">Weekly Text Task Summary</h4>
-                          {/* Check if textTaskData and its labels exist */}
-                          {textTaskData && textTaskData.labels && Object.keys(textTaskData.labels).length > 0 ? (
-                            // --- Render the table ---
-                            <div className="overflow-x-auto bg-white p-4 rounded shadow"> {/* Added container styling */}
-                              <table className="min-w-full border-collapse border border-gray-300 text-sm md:text-base"> {/* Table styling */}
-                                <thead>
-                                  <tr className="bg-gray-100">
-                                    {/* Sticky header for task name */}
-                                    <th className="border px-3 py-2 text-left sticky left-0 bg-gray-100 z-10">Task</th>
-                                    {/* Day headers */}
-                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                                        <th key={day} className="border px-3 py-2">{day}</th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {/* Iterate over the labels provided by the backend */}
-                                  {Object.entries(textTaskData.labels).map(([slug, label]) => (
-                                    <tr key={slug} className="hover:bg-gray-50">
-                                    {/* Task Label Cell (Leave as is) */}
-                                    <td className="border px-3 py-2 sticky left-0 bg-white z-10 font-medium">{label}</td>
- 
-                                    {/* --- ULTRA-SIMPLIFIED DAY MAPPING --- */}
-                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(dayShort => {
-                                       // Define the map INSIDE the loop (less efficient, but safer for now)
-                                       const shortToLongDay = {
-                                           Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday',
-                                           Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday'
-                                       };
-                                       const dayLong = shortToLongDay[dayShort]; // Get corresponding long name
-
-                                       // Determine status based on plan (using dayLong) and completion (using dayShort)
-                                       const plannedValue = textTaskData.plan?.[slug]?.[dayLong];
-                                       const isPlanned = plannedValue && plannedValue.trim() !== '';
-                                       const isComplete = textTaskData.completion?.[slug]?.[dayShort];
-
-                                       // Optional: Keep this log for one more check
-                                       console.log(`Text Summary Check: ShortDay=${dayShort}, LongDay=${dayLong}, Slug=${slug}, PlannedVal='${plannedValue}', isPlanned=${isPlanned}, isComplete=${isComplete}`);
-
-                                       // Symbol determination logic (unchanged from before)
-                                       let symbol = <span className="text-gray-400 text-md" title="Not Planned, Not Done">-</span>;
-                                       let symbolTitle = "Not Planned, Not Done";
-                                       if (isPlanned && isComplete) {
-                                           symbol = <span className="text-green-600 text-xl font-bold" title="Planned & Done">✓</span>;
-                                           symbolTitle = "Planned & Done";
-                                       } else if (isPlanned && !isComplete) {
-                                           symbol = <span className="text-red-500 text-xl font-bold" title="Planned, Not Done">X</span>;
-                                           symbolTitle = "Planned, Not Done";
-                                       } else if (!isPlanned && isComplete) {
-                                           symbol = <span className="text-orange-500 text-xl font-bold" title="Not Planned, But Done">✓</span>;
-                                           symbolTitle = "Not Planned, But Done";
-                                       }
-
-                                       // Return the actual TD with the calculated symbol
-                                       return (
-                                          <td key={`${slug}-${dayShort}`} className="border px-2 py-2 text-center" title={symbolTitle}>
-                                               {symbol}
-                                          </td>
-                                       );
-                                    })}
-                                  </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                              {/* --- ADDED: Legend --- */}
-                              <div className="mt-3 text-sm text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-                                <span>Legend:</span>
-                                <span><span className="text-green-600 font-bold">✓</span> Set task complete</span>
-                                <span><span className="text-red-500 font-bold">X</span> Set task not done</span>
-                                <span><span className="text-orange-500 font-bold">✓</span> Extra work</span>
-                                <span><span className="text-gray-400">-</span> Not Set</span>
-                              </div>
-                            </div>
-                          ) : textTaskData ? (
-                            // Message if textTaskData exists but no text tasks are defined
-                            <p className="p-4 bg-gray-100 rounded text-gray-500">No custom text tasks defined for this user.</p>
-                          ) : (
-                            // Message if data hasn't loaded yet
-                            <p className="p-4 bg-gray-100 rounded text-gray-500">Select a date to view text task summary.</p>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      // Message if no data
-                      <p className="mt-6 text-gray-500">Select a date to view weekly progress charts.</p>
-                    )}
-                  </div> // Closes the main div for charts area
-                )} 
-              </>
-            )}
-          </div>
-        )}
-        
-        {currentAction === 'editTasks' && (
-            <div className="mt-4 p-4 border rounded">
-                <h3 className="font-semibold mb-2">Add/Edit Weekly Expected Tasks</h3>
-                <div>
-
-                 {/* === START: Active Tasks Section === */}
-                  <h4 className="font-medium mt-4 mb-2 text-lg">Active Tasks</h4>
-                  <div className="overflow-x-auto mb-4">
-                     <table className="table-fixed min-w-full lg:min-w-[1400px] border-collapse border border-gray-400">
-                       <thead>
-                        <tr className="bg-gray-100">
-                          <th className="border px-4 py-2 sticky left-0 bg-gray-100 z-10 w-1/4">Task</th>
-                          {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-                            .map(day => (
-                            <th key={day} className="border px-4 py-2">{day}</th>
-                          ))}
-                          <th className="border px-4 py-2 w-auto">Actions</th> {/* Added Actions column header */}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {definitions
-                          .filter(def=> (
-                            def.is_active && (
-                              !def.is_default
-                            || ['expected_math_points','expected_daily_reading_percent']
-                                .includes(def.slug)
-                            )
-                          ))
-
-                          .map(def => (
-                          <tr key={def.id}>
-                            <td className="border px-4 py-2 sticky left-0 bg-white z-10 align-top">
-                              <input
-                                type="text"
-                                value={def.label}
-                                onChange={e => updateDefinition(def.id, 'label', e.target.value)}
-                                className="w-full border p-1 rounded mb-1"
-                                disabled={def.readonly || def.is_default}
-                              />
-                              <select
-                                value={def.field_type}
-                                onChange={e => updateDefinition(def.id, 'field_type', e.target.value)}
-                                className="mt-1 border p-1 rounded w-full"
-                                disabled={def.readonly || def.is_default}
-                              >
-                                <option value="text">Text</option>
-                                <option value="number">Number</option>
-                                <option value="percent">Percent</option>
-                              </select>
-                          </td>
-                          {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-                            
-                            .map(day => (
-                              <td key={day} className="border px-1 py-1 align-top">
-                                <textarea
-                                  rows={2}
-                                  value={entries[day]?.[def.slug] || ''}
-                                  onChange={e => updateEntry(day, def.slug, e.target.value)}
-                                  readOnly={false}
-                                  className={`w-full border p-1 rounded resize-none border-gray-300`}
+                            <h5 className="font-normal mb-1 text-center text-gray-600">Daily Reading Progress</h5>
+                            <ResponsiveContainer width="100%" height={300}>
+                              <LineChart data={weeklyData} margin={{ top: 20, right: 30, bottom: 30, left: 20 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis
+                                  dataKey="day"
+                                  tickFormatter={(value, index) => {
+                                      const item = weeklyData[index];
+                                      if (!item || !item.date) return value;
+                                      const dateObj = new Date(item.date + 'T00:00:00');
+                                      const dayName = dateObj.toLocaleDateString('en-NZ', { weekday: 'short' });
+                                      const dayNum = dateObj.getDate();
+                                      const month = dateObj.getMonth() + 1;
+                                      const shortDate = `${dayNum}/${month}`;
+                                      return `${dayName} ${shortDate}`;
+                                  }}
+                                  interval={0}
                                 />
-                              </td>
-                            ))}
-                            <td className="border px-2 py-1 text-center align-middle"> {/* Added Actions cell, align-middle */}
-                              {!def.is_default && ( // Only allow deactivating non-default tasks
-                                <button
-                                  onClick={() => handleSetTaskActiveStatus(def.id, false)}
-                                  className="bg-red-500 hover:bg-red-700 text-white text-xs py-1 px-2 rounded"
-                                  >
-                                  Deactivate
-                                </button>
-                              )}
+                                <YAxis label={{ value: 'Percent (%)', angle: -90, position: 'insideLeft' }}/>
+                                <Tooltip />
+                                <Legend />
+                                <Line dataKey="daily_reading_percent" name="Actual % Read" stroke="#7194da" strokeWidth={2} />
+                                <Line type="monotone" dataKey="expected_daily_reading_percent" name="Target % Read" stroke="#b30000" strokeWidth={2} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                          
+                          {/* Weekly Reading Summary Chart */}
+                          <div className="flex-shrink-0 w-full md:w-1/4 md:basis-1/4 md:pl-4 border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0">
+                            <h5 className="font-normal mb-1 text-center text-gray-600">Weekly Total Reading %</h5>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart
+                                    data={[{ // Data structure for the bar chart
+                                        name: 'Total', // Single category
+                                        Actual: weeklySummary.total_actual_reading_percent,
+                                        Target: weeklySummary.total_expected_reading_percent
+                                    }]}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="category" dataKey="name" hide/> {/* Hide 'Total' label */}
+                                    <YAxis type="number"  /> {/* Values on X-axis */}
+                                    <Tooltip />
+                                    <Legend />
+                                    {/* Ensure dataKeys match the keys in the data array above */}
+                                    <Bar dataKey="Actual" name="Actual Reading %" fill="#7194da" />
+                                    <Bar dataKey="Target" name="Target Reading %" fill="#b30000" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                        </div>
+                      </div>
+
+                      {/* Weekly Text Task Summary Section */}
+                      <div className="mt-8">
+                        <h4 className="text-2xl font-semibold mb-4">Weekly Text Task Summary</h4>
+                        {/* Check if textTaskData and its labels exist */}
+                        {textTaskData && textTaskData.labels && Object.keys(textTaskData.labels).length > 0 ? (
+                          // --- Render the table ---
+                          <div className="overflow-x-auto bg-white p-4 rounded shadow"> {/* Added container styling */}
+                            <table className="min-w-full border-collapse border border-gray-300 text-sm md:text-base"> {/* Table styling */}
+                              <thead>
+                                <tr className="bg-gray-100">
+                                  {/* Sticky header for task name */}
+                                  <th className="border px-3 py-2 text-left sticky left-0 bg-gray-100 z-10">Task</th>
+                                  {/* Day headers */}
+                                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                                      <th key={day} className="border px-3 py-2">{day}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {/* Iterate over the labels provided by the backend */}
+                                {Object.entries(textTaskData.labels).map(([slug, label]) => (
+                                  <tr key={slug} className="hover:bg-gray-50">
+                                  {/* Task Label Cell (Leave as is) */}
+                                  <td className="border px-3 py-2 sticky left-0 bg-white z-10 font-medium">{label}</td>
+
+                                  {/* --- ULTRA-SIMPLIFIED DAY MAPPING --- */}
+                                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(dayShort => {
+                                      // Define the map INSIDE the loop (less efficient, but safer for now)
+                                      const shortToLongDay = {
+                                          Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday',
+                                          Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday'
+                                      };
+                                      const dayLong = shortToLongDay[dayShort]; // Get corresponding long name
+
+                                      // Determine status based on plan (using dayLong) and completion (using dayShort)
+                                      const plannedValue = textTaskData.plan?.[slug]?.[dayLong];
+                                      const isPlanned = plannedValue && plannedValue.trim() !== '';
+                                      const isComplete = textTaskData.completion?.[slug]?.[dayShort];
+
+                                      // Optional: Keep this log for one more check
+                                      console.log(`Text Summary Check: ShortDay=${dayShort}, LongDay=${dayLong}, Slug=${slug}, PlannedVal='${plannedValue}', isPlanned=${isPlanned}, isComplete=${isComplete}`);
+
+                                      // Symbol determination logic (unchanged from before)
+                                      let symbol = <span className="text-gray-400 text-md" title="Not Planned, Not Done">-</span>;
+                                      let symbolTitle = "Not Planned, Not Done";
+                                      if (isPlanned && isComplete) {
+                                          symbol = <span className="text-green-600 text-xl font-bold" title="Planned & Done">✓</span>;
+                                          symbolTitle = "Planned & Done";
+                                      } else if (isPlanned && !isComplete) {
+                                          symbol = <span className="text-red-500 text-xl font-bold" title="Planned, Not Done">X</span>;
+                                          symbolTitle = "Planned, Not Done";
+                                      } else if (!isPlanned && isComplete) {
+                                          symbol = <span className="text-orange-500 text-xl font-bold" title="Not Planned, But Done">✓</span>;
+                                          symbolTitle = "Not Planned, But Done";
+                                      }
+
+                                      // Return the actual TD with the calculated symbol
+                                      return (
+                                        <td key={`${slug}-${dayShort}`} className="border px-2 py-2 text-center" title={symbolTitle}>
+                                              {symbol}
+                                        </td>
+                                      );
+                                  })}
+                                </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {/* --- ADDED: Legend --- */}
+                            <div className="mt-3 text-sm text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                              <span>Legend:</span>
+                              <span><span className="text-green-600 font-bold">✓</span> Set task complete</span>
+                              <span><span className="text-red-500 font-bold">X</span> Set task not done</span>
+                              <span><span className="text-orange-500 font-bold">✓</span> Extra work</span>
+                              <span><span className="text-gray-400">-</span> Not Set</span>
+                            </div>
+                          </div>
+                        ) : textTaskData ? (
+                          // Message if textTaskData exists but no text tasks are defined
+                          <p className="p-4 bg-gray-100 rounded text-gray-500">No custom text tasks defined for this user.</p>
+                        ) : (
+                          // Message if data hasn't loaded yet
+                          <p className="p-4 bg-gray-100 rounded text-gray-500">Select a date to view text task summary.</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    // Message if no data
+                    <p className="mt-6 text-gray-500">Select a date to view weekly progress charts.</p>
+                  )}
+                </div> // Closes the main div for charts area
+              )} 
+            </>
+          )}
+        </div>
+      )}
+      {/* === END: CONFIGURE USER Section === */}
+      
+
+      {/* === START: EDIT TASKS Section === */}  
+      {currentAction==='editTasks' && (
+          <div className="mt-4 p-4 border rounded">
+              <h3 className="font-semibold mb-2">Add/Edit Weekly Expected Tasks</h3>
+              <div>
+
+                {/* === START: Active Tasks Section === */}
+                <h4 className="font-medium mt-4 mb-2 text-lg">Active Tasks</h4>
+                <div className="overflow-x-auto mb-4">
+                    <table className="table-fixed min-w-full lg:min-w-[1400px] border-collapse border border-gray-400">
+                      <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-4 py-2 sticky left-0 bg-gray-100 z-10 w-1/4">Task</th>
+                        {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+                          .map(day => (
+                          <th key={day} className="border px-4 py-2">{day}</th>
+                        ))}
+                        <th className="border px-4 py-2 w-auto">Actions</th> {/* Added Actions column header */}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {definitions
+                        .filter(def=> (
+                          def.is_active && (
+                            !def.is_default
+                          || ['expected_math_points','expected_daily_reading_percent']
+                              .includes(def.slug)
+                          )
+                        ))
+
+                        .map(def => (
+                        <tr key={def.id}>
+                          <td className="border px-4 py-2 sticky left-0 bg-white z-10 align-top">
+                            <input
+                              type="text"
+                              value={def.label}
+                              onChange={e => updateDefinition(def.id, 'label', e.target.value)}
+                              className="w-full border p-1 rounded mb-1"
+                              disabled={def.readonly || def.is_default}
+                            />
+                            <select
+                              value={def.field_type}
+                              onChange={e => updateDefinition(def.id, 'field_type', e.target.value)}
+                              className="mt-1 border p-1 rounded w-full"
+                              disabled={def.readonly || def.is_default}
+                            >
+                              <option value="text">Text</option>
+                              <option value="number">Number</option>
+                              <option value="percent">Percent</option>
+                            </select>
+                        </td>
+                        {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+                          
+                          .map(day => (
+                            <td key={day} className="border px-1 py-1 align-top">
+                              <textarea
+                                rows={2}
+                                value={entries[day]?.[def.slug] || ''}
+                                onChange={e => updateEntry(day, def.slug, e.target.value)}
+                                readOnly={false}
+                                className={`w-full border p-1 rounded resize-none border-gray-300`}
+                              />
+                            </td>
+                          ))}
+                          <td className="border px-2 py-1 text-center align-middle"> {/* Added Actions cell, align-middle */}
+                            {!def.is_default && ( // Only allow deactivating non-default tasks
+                              <button
+                                onClick={() => handleSetTaskActiveStatus(def.id, false)}
+                                className="bg-red-500 hover:bg-red-700 text-white text-xs py-1 px-2 rounded"
+                                >
+                                Deactivate
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      
+                      {/* "Add new task" row */}
+                      <tr>
+                        <td className="border px-4 py-2 sticky left-0 bg-white z-10 align-top">
+                          <input
+                            placeholder="New task label"
+                            value={newLabel}
+                            onChange={e => setNewLabel(e.target.value)}
+                            className="w-full border p-1 rounded mb-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={addNewDefinition}
+                            className="mt-1 bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                          >
+                            Add New Task
+                          </button>
+                        </td>
+                        <td colSpan={8} className="border"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {/* === END: Active Tasks Section === */}
+                
+                {/* EXISTING SAVE BUTTONS - THESE ARE UNCHANGED AND IMPORTANT! */}
+                <div className="mt-4 mb-6">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      // This is the original logic for saving definitions
+                      try {
+                        const res = await fetch(`/admin/user/${selectedUser}/task-definitions`, {
+                          method: 'POST',
+                          headers: {'Content-Type':'application/json'},
+                          body: JSON.stringify(definitions)
+                        });
+                        if (!res.ok) {
+                          const errData = await res.json().catch(() => ({}));
+                          throw new Error(`HTTP error! status: ${res.status}. ${errData.message || 'Failed to save definitions.'}`);
+                        }
+                        const updatedDefinitionsFromServer = await res.json(); // Get the updated list
+                        setDefinitions(updatedDefinitionsFromServer); // <--- UPDATE STATE HERE
+                      } catch (err) {
+                          console.error("Error saving definitions:", err);
+                          alert(`Error saving definitions: ${err.message}`);
+                      }
+                    }}
+                    className="mt-4 bg-blue-500 text-white px-4 py-2 rounded mr-2 hover:bg-blue-600 transition">
+                    Save Field Definitions
+                  </button>
+
+                  {/* The existing "Save Weekly Entries" button */}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      // Directly save the current 'entries' state
+                      console.log("Saving weekly entries payload:", entries); // Debug
+                      try {
+                          const res = await fetch(`/admin/user/${selectedUser}/task-entries`, {
+                                method: 'POST',
+                                headers: {'Content-Type':'application/json'},
+                                body: JSON.stringify(entries) // Send the current entries state
+                          });
+                          if (!res.ok) {
+                              const errData = await res.json().catch(() => ({})); // Try get error msg
+                              throw new Error(`HTTP error! status: ${res.status}. ${errData.message || ''}`);
+                            }
+                          const result = await res.json();
+                          if(result.status === 'success'){
+                                //alert('Weekly entries saved');
+                                // No need to setEntries(payload) as entries IS the source
+                          } else {
+                              alert(`Error saving weekly entries: ${result.message || 'Unknown error'}`);
+                          }
+                      } catch (err) {
+                          console.error("Error saving weekly entries:", err);
+                          alert(`Error saving weekly entries. ${err.message}`);
+                      }
+                    }}
+                    className="mt-4 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
+                    Save Weekly Entries
+                  </button>
+                </div>
+
+                {/* === START: Deactivated Tasks Section === */}
+                <h4 className="font-medium mt-8 mb-2 text-lg">Deactivated Tasks</h4>
+                <div className="overflow-x-auto mb-4">
+                  <table className="table-fixed min-w-full lg:min-w-[600px] border-collapse border border-gray-400">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border px-4 py-2 w-3/4">Task Name</th>
+                        <th className="border px-4 py-2 w-1/4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {definitions
+                        .filter(def => !def.is_active && !def.is_default) // Show inactive, non-default
+                        .map(def => (
+                          <tr key={def.id || def.slug}>
+                            <td className="border px-4 py-2 font-medium">{def.label}</td>
+                            <td className="border px-2 py-1 text-center">
+                              <button
+                                onClick={() => handleSetTaskActiveStatus(def.id, true)}
+                                className="bg-green-500 hover:bg-green-700 text-white text-xs py-1 px-2 rounded"
+                              >
+                                Reactivate
+                              </button>
                             </td>
                           </tr>
                         ))}
-                        
-                        {/* "Add new task" row */}
+                      {definitions.filter(def => !def.is_active && !def.is_default).length === 0 && (
                         <tr>
-                          <td className="border px-4 py-2 sticky left-0 bg-white z-10 align-top">
-                            <input
-                              placeholder="New task label"
-                              value={newLabel}
-                              onChange={e => setNewLabel(e.target.value)}
-                              className="w-full border p-1 rounded mb-1"
-                            />
-                            <button
-                              type="button"
-                              onClick={addNewDefinition}
-                              className="mt-1 bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
-                            >
-                              Add New Task
-                            </button>
-                          </td>
-                          <td colSpan={8} className="border"></td>
+                          <td colSpan="2" className="text-center py-3 border text-gray-500">No deactivated tasks.</td>
                         </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* === END: Active Tasks Section === */}
-                  
-                  {/* EXISTING SAVE BUTTONS - THESE ARE UNCHANGED AND IMPORTANT! */}
-                  <div className="mt-4 mb-6">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        // This is the original logic for saving definitions
-                        try {
-                          const res = await fetch(`/admin/user/${selectedUser}/task-definitions`, {
-                            method: 'POST',
-                            headers: {'Content-Type':'application/json'},
-                            body: JSON.stringify(definitions)
-                          });
-                          if (!res.ok) {
-                            const errData = await res.json().catch(() => ({}));
-                            throw new Error(`HTTP error! status: ${res.status}. ${errData.message || 'Failed to save definitions.'}`);
-                          }
-                          const updatedDefinitionsFromServer = await res.json(); // Get the updated list
-                          setDefinitions(updatedDefinitionsFromServer); // <--- UPDATE STATE HERE
-                        } catch (err) {
-                            console.error("Error saving definitions:", err);
-                            alert(`Error saving definitions: ${err.message}`);
-                        }
-                      }}
-                      className="mt-4 bg-blue-500 text-white px-4 py-2 rounded mr-2 hover:bg-blue-600 transition">
-                      Save Field Definitions
-                    </button>
-
-                    {/* The existing "Save Weekly Entries" button */}
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        // Directly save the current 'entries' state
-                        console.log("Saving weekly entries payload:", entries); // Debug
-                        try {
-                            const res = await fetch(`/admin/user/${selectedUser}/task-entries`, {
-                                  method: 'POST',
-                                  headers: {'Content-Type':'application/json'},
-                                  body: JSON.stringify(entries) // Send the current entries state
-                            });
-                            if (!res.ok) {
-                                const errData = await res.json().catch(() => ({})); // Try get error msg
-                                throw new Error(`HTTP error! status: ${res.status}. ${errData.message || ''}`);
-                              }
-                            const result = await res.json();
-                            if(result.status === 'success'){
-                                  //alert('Weekly entries saved');
-                                  // No need to setEntries(payload) as entries IS the source
-                            } else {
-                                alert(`Error saving weekly entries: ${result.message || 'Unknown error'}`);
-                            }
-                        } catch (err) {
-                            console.error("Error saving weekly entries:", err);
-                            alert(`Error saving weekly entries. ${err.message}`);
-                        }
-                      }}
-                      className="mt-4 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition">
-                      Save Weekly Entries
-                    </button>
-                  </div>
-
-                  {/* === START: Deactivated Tasks Section === */}
-                  <h4 className="font-medium mt-8 mb-2 text-lg">Deactivated Tasks</h4>
-                  <div className="overflow-x-auto mb-4">
-                    <table className="table-fixed min-w-full lg:min-w-[600px] border-collapse border border-gray-400">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="border px-4 py-2 w-3/4">Task Name</th>
-                          <th className="border px-4 py-2 w-1/4">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {definitions
-                          .filter(def => !def.is_active && !def.is_default) // Show inactive, non-default
-                          .map(def => (
-                            <tr key={def.id || def.slug}>
-                              <td className="border px-4 py-2 font-medium">{def.label}</td>
-                              <td className="border px-2 py-1 text-center">
-                                <button
-                                  onClick={() => handleSetTaskActiveStatus(def.id, true)}
-                                  className="bg-green-500 hover:bg-green-700 text-white text-xs py-1 px-2 rounded"
-                                >
-                                  Reactivate
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        {definitions.filter(def => !def.is_active && !def.is_default).length === 0 && (
-                          <tr>
-                            <td colSpan="2" className="text-center py-3 border text-gray-500">No deactivated tasks.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {/* === END: Deactivated Tasks Section === */}
-              </div>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {/* === END: Deactivated Tasks Section === */}
             </div>
-          )}
-      </div>
-      )}
-  </div>
+          </div>
+        )}
+        {/* === END: EDIT TASKS Section === */}
+    </div>
+    
   );
 }
