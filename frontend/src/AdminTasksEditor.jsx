@@ -772,6 +772,15 @@ const saveDailyReport = async () => {
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
             onClick={async () => {
+              if (
+                tierBounds.needsWorkMax <= 0 ||
+                tierBounds.needsWorkMax >= tierBounds.goodMax ||
+                tierBounds.goodMax > 1          
+              ) {
+                alert('“Good Max” may be up to 1.00 and must be greater than “Needs-Work Max”.');
+                return;                          // stop — nothing is sent to the server
+              }
+              
               try {
                 // save thresholds
                 const tRes = await fetch('/admin/tier-thresholds', {
@@ -787,8 +796,8 @@ const saveDailyReport = async () => {
                 });
                 
                 if (!tRes.ok || !mRes.ok) {
-                  const msg = !(tRes.ok ? mRes : tRes);
-                  const {message='' } = await msg.json().catch(()=>({}));
+                  const errRes = tRes.ok ? mRes : tRes;
+                  const { message = '' } = await errRes.json().catch(() => ({}));
                   alert(message || 'Save failed');
                   return;
                 }
@@ -887,7 +896,15 @@ const saveDailyReport = async () => {
                         </strong>
                         <div className="mt-1 text-sm">
                           Overall {(e.overall_pct*100).toFixed(0)} %
-                          {e.extra_tasks>0 && `  (+${e.extra_tasks} extra task${e.extra_tasks>1?'s':''})`}
+                          {e.scope==='final' && (() => {
+                            const bits = [];
+                            if (e.extra_math_points) bits.push(`${e.extra_math_points} extra maths point${e.extra_math_points>1?'s':''}`);
+                            if (e.extra_reading_percent) bits.push(`${e.extra_reading_percent}% extra reading`);
+                            if (e.extras)
+                              bits.push(...Object.entries(e.extras)
+                                .map(([slug,n]) => `${n} extra ${(textTaskData?.labels?.[slug]||slug)} task${n>1?'s':''}`));
+                            return bits.length ? `  (+${bits.join(', ')})` : '';
+                          })()}
                         </div>
                       </div>
                     );

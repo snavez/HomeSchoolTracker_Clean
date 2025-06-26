@@ -80,7 +80,9 @@ def _get_weekly_progress_data(user_id, date_str):
     try:
         d = datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError: return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
-
+    
+    WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    FULL_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     monday = d - timedelta(days=(d.weekday()))
     sunday = monday + timedelta(days=6)
     day_before_monday = monday - timedelta(days=1)
@@ -269,19 +271,41 @@ def _get_weekly_progress_data(user_id, date_str):
         })
 
     # --- Totals for custom text tasks ---------------------------------
-    planned_week_text_tasks = sum(
-        1
-        for slug in text_task_defs
-        for v in plan.get(slug, {}).values()
-        if str(v).strip()           # a value was planned
-    )
+#    planned_week_text_tasks = sum(
+#        1
+#        for slug in text_task_defs
+#        for v in plan.get(slug, {}).values()
+#        if str(v).strip()           # a value was planned
+#    )
 
-    completed_week_text_tasks = sum(
-        1
-        for slug in text_task_defs
-        for done in text_task_completion[slug].values()
-        if done                      # the student actually did it
-    )
+#    completed_week_text_tasks = sum(
+#        1
+#        for slug in text_task_defs
+#        for done in text_task_completion[slug].values()
+#        if done                      # the student actually did it
+#    )
+
+    # --- Per-task tallies ------------------------------------------------
+    slug_stats = {}
+    for slug in text_task_defs:
+        # sessions the plan expected *up to today* (Mon → selected date)
+        planned = sum(1 for day, v in plan.get(slug, {}).items() if str(v).strip() and FULL_WEEKDAYS.index(day) <= d.weekday())
+
+        # sessions actually done up to today
+        done = sum(1 for short, ok in text_task_completion[slug].items() if ok and WEEKDAYS.index(short) <= d.weekday())
+
+        pct    = None if planned == 0 else round(min(done, planned) / planned, 3)
+        extras = 0 if d.weekday() < 6 else max(0, done - planned)  # extras only count on Sunday
+        slug_stats[slug] = {"planned": planned,
+                            "done":    done,
+                            "pct":     pct,
+                            "extras":  extras}
+
+    # headline “tasks” percentage is the average of the per-slug percentages
+    non_null = [s["pct"] for s in slug_stats.values() if s["pct"] is not None]
+    tasks_pct = round(sum(non_null)/len(non_null), 3) if non_null else None
+
+
     # Prepare final response
     response_data = {
         "dailyData": daily_data_out,
@@ -299,17 +323,19 @@ def _get_weekly_progress_data(user_id, date_str):
     }
 
     # ---------- Effort summary ----------
-    def _pct(num, denom): 
-        return None if not denom else round(num/denom,3)
+    def _capped_pct(num, denom):
+        """Return ratio, but never above 1.0 (100 %)."""
+        return None if not denom else round(min(num, denom) / denom, 3)
 
-    math_pct = _pct(total_actual_math_points,   running_expect_math if d.weekday()<6 else total_expected_math_points)
-    read_pct = _pct(total_actual_reading_percent, running_expect_read if d.weekday()<6 else total_expected_reading_percent)
+    math_pct = _capped_pct(total_actual_math_points, running_expect_math if d.weekday()<6 else total_expected_math_points)
+    read_pct = _capped_pct(total_actual_reading_percent, running_expect_read if d.weekday()<6 else total_expected_reading_percent)
+    math_extra = max(0, total_actual_math_points - total_expected_math_points)
+    read_extra = max(0, total_actual_reading_percent - total_expected_reading_percent)
 
-    planned_total   = running_plan_tasks if d.weekday()<6 else planned_week_text_tasks
-    completed_total = completed_week_text_tasks
-    tasks_pct       = _pct(min(completed_total, planned_total), planned_total)
-
-    extra_tasks     = max(0, completed_total - planned_total)
+    #planned_total   = running_plan_tasks if d.weekday()<6 else planned_week_text_tasks
+    #completed_total = completed_week_text_tasks
+    #tasks_pct       = _capped_pct(min(completed_total, planned_total), planned_total)
+    #extra_tasks     = max(0, completed_total - planned_total)
 
     parts = [p for p in (math_pct, read_pct, tasks_pct) if p is not None]
     overall_pct = round(sum(parts)/len(parts),3) if parts else None
@@ -326,19 +352,31 @@ def _get_weekly_progress_data(user_id, date_str):
         if p < needs_work_max:  return 'needsWork'
         if p < good_max:  return 'good'
         return 'excellent'
-
+    
+    # decide whether we’re mid-week or Sunday
     scope = 'progress' if d.weekday()<6 else 'final'
+    
+    # “Perfect + something extra” ⇒ excellence even if admin set >100 %
+    extra_any = (math_extra > 0) or (read_extra > 0) or any(s["extras"] > 0 for s in slug_stats.values())
+    if scope == 'final' and overall_pct == 1.0 and extra_any:
+        tier_name = 'excellent'
+    else:
+        tier_name = tier(overall_pct)
 
     effort = {
         "math_pct": math_pct,
         "reading_pct": read_pct,
         "tasks_pct": tasks_pct,
         "overall_pct": overall_pct,
-        "tier": tier(overall_pct),
+        "tier": tier_name,
         "scope": scope,
-        "extra_tasks": extra_tasks
     }
 
+    if scope == 'final':
+        effort["extras"] = {slug: s["extras"] for slug, s in slug_stats.items() if s["extras"] > 0}
+        if math_extra:   effort["extra_math_points"]     = math_extra
+        if read_extra:   effort["extra_reading_percent"] = read_extra
+    
     # Sunday “near-miss” nudge
     excellent_cutoff = good_max
     if scope=='final' and effort["tier"]=='good' and (excellent_cutoff - overall_pct) <= NEAR_MISS_DELTA:
@@ -934,10 +972,10 @@ def set_tier_thresholds():
     try:
         nw = float(data['needsWorkMax'])
         gm = float(data['goodMax'])
-        assert 0 < nw < gm < 1
+        assert 0 < nw < gm <= 1
     except (KeyError, ValueError, AssertionError):
         return jsonify({'status':'failure',
-                        'message':'Both numbers must be between 0 and 1, and needsWork < good.'}), 400
+                        'message':'Both numbers must be greater than 0 and less than or equal to 1, and needsWork < good.'}), 400
     with sqlite3.connect(DATABASE) as conn:
         cur = conn.cursor()
         cur.execute('UPDATE tier_thresholds SET needs_work_max=?, good_max=? WHERE id=1', (nw, gm))

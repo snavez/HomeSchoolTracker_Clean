@@ -359,7 +359,15 @@ export default function HomeSchoolTracker({ userId, onLogout }) {
               </strong>
               <div className="mt-1 text-sm">
                 Overall {(e.overall_pct*100).toFixed(0)} %
-                {e.extra_tasks>0 && `  (+${e.extra_tasks} extra task${e.extra_tasks>1?'s':''})`}
+                {e.scope==='final' && (() => {
+                  const bits = [];
+                  if (e.extra_math_points) bits.push(`${e.extra_math_points} extra maths point${e.extra_math_points>1?'s':''}`);
+                  if (e.extra_reading_percent) bits.push(`${e.extra_reading_percent}% extra reading`);
+                  if (e.extras)
+                    bits.push(...Object.entries(e.extras)
+                      .map(([slug,n]) => `${n} extra ${(textTaskData?.labels?.[slug]||slug)} task${n>1?'s':''}`));
+                  return bits.length ? `  (+${bits.join(', ')})` : '';
+                })()}
               </div>
             </div>
           );
