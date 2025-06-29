@@ -287,7 +287,7 @@ export default function HomeSchoolTracker({ userId, onLogout }) {
 
               const todayTasks = entries[day] || {};
               return definitions
-                .filter(def => todayTasks[def.slug])
+                .filter(def => (def.is_active ?? true) && todayTasks[def.slug])
                 .map(def => `${def.label}: ${todayTasks[def.slug]}`)
                 .join(', ') || 'None set';
             })()}
